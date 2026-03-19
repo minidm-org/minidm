@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MiniDM - Apps</title>
+    
+    <script>
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    </script>
+
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h2 style="margin-top: 0; border-bottom: 2px solid #007bff; padding-bottom: 10px;">Deploy Bundles</h2>
+        
+        <div style="display: flex; gap: 10px; margin-bottom: 15px; background: #f8f9fa; padding: 15px; border-radius: 6px; border: 1px solid #ddd;">
+            <input type="text" id="newBundleName" placeholder="Bundle Name (e.g., Base Finance Stack)" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+            <input type="text" id="newBundleDesc" placeholder="Description (Optional)" style="flex: 2; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+            <button onclick="createDeployBundle()" style="background: #28a745; padding: 8px 15px;">Create Bundle</button>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Bundle Name</th>
+                    <th>Description</th>
+                    <th>Apps in Bundle</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="bundleTableBody">
+                <tr><td colspan="4" style="text-align:center;">Loading bundles...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="container">
+        <h2 style="margin-top: 0; border-bottom: 2px solid #007bff; padding-bottom: 10px;">Search WinGet Repository</h2>
+        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+            <input type="text" id="searchInput" placeholder="Search (e.g., Adobe, Zoom, VLC)..." style="flex-grow: 1;">
+            <button onclick="searchWinGet()" style="background: #6f42c1;">Search GitHub</button>
+        </div>
+        <div id="searchResultsContainer" style="display: none; margin-top: 15px; margin-bottom: 20px;">
+            <table>
+                <thead><tr><th style="width: 50px;">Select</th><th>Discovered Package ID</th></tr></thead>
+                <tbody id="searchResultsBody"></tbody>
+            </table>
+            <button onclick="syncSelected()" style="background: #28a745; margin-top: 10px; width: 100%;">Add Selected to Catalog</button>
+        </div>
+        <div style="margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 15px;">
+            <p style="margin: 0 0 10px 0; font-size: 0.85em; color: #666;"><strong>Fallback:</strong> Directly sync an exact Package ID (Does not require a GitHub Token for up to 60 requests/hr).</p>
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="manualPackageId" placeholder="Exact Package ID (e.g., Mozilla.Firefox)..." style="flex-grow: 1;">
+                <button onclick="syncManualPackage(this)" style="background: #17a2b8;">Manual Sync</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2 style="margin-top: 0; border-bottom: 2px solid #007bff; padding-bottom: 10px;">Ready for Deployment</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>App Name</th>
+                    <th>Version</th>
+                    <th>Install Flags</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="catalogTableBody"></tbody>
+        </table>
+    </div>
+
+    <div id="bundleAssignModal" class="modal-overlay">
+        <div class="modal-box">
+            <h3>Assign to Deploy Bundles</h3>
+            <p>Select the bundles to include <strong id="assignTargetName"></strong> in:</p>
+            <div id="bundleListContainer" class="scrollable-list"><p style="margin: 0; color: #666;">Loading bundles...</p></div>
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button onclick="closeBundleModal()" style="background: #6c757d;">Cancel</button>
+                <button onclick="saveBundleAssignments()" style="background: #28a745;">Save Assignments</button>
+            </div>
+        </div>
+    </div>
+
+<div id="deployModal" class="modal-overlay">
+        <div class="modal-box">
+            <h3>Deploy Application</h3>
+            <p>Select target devices for <strong id="deployPackageName"></strong>:</p>
+            
+            <div style="margin-bottom: 15px; background: #f8f9fa; padding: 10px; border-radius: 4px; border: 1px solid #ddd;">
+                <label for="deployTiming" style="font-weight: bold; display: block; margin-bottom: 5px; font-size: 0.9em;">Execution Timing:</label>
+                <select id="deployTiming" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                    <option value="Immediate">Immediate (Background Installation)</option>
+                    <option value="OnStartup">Pre-Login (Cache now, Install on next boot)</option>
+                </select>
+            </div>
+
+            <div style="margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+                <input type="checkbox" id="selectAllDevices" onchange="toggleAllDevices(this)">
+                <label for="selectAllDevices"><strong>Select All Devices</strong></label>
+            </div>
+            <div id="deviceListContainer" class="scrollable-list"></div>
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button onclick="closeModal()" style="background: #6c757d;">Cancel</button>
+                <button onclick="confirmBulkDeployment()" style="background: #28a745;">Confirm Deploy</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        let currentDeployPackage = '';
+        let currentAssignPackage = '';
+        let allDeployBundles = [];
+
+        // --- BUNDLE MANAGEMENT LOGIC ---
+        async function fetchBundles() {
+            try {
+                const response = await fetch('/api/admin/deploy-bundles');
+                allDeployBundles = await response.json();
+                const tbody = document.getElementById('bundleTableBody');
+                tbody.innerHTML = '';
+
+                if (allDeployBundles.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#666;">No deploy bundles created.</td></tr>';
+                    return;
+                }
+
+                allDeployBundles.forEach(bundle => {
+                    tbody.innerHTML += `
+                        <tr id="bundle-row-${bundle.id}">
+                            <td><strong>${bundle.name}</strong></td>
+                            <td style="color:#555;">${bundle.description || '-'}</td>
+                            <td><strong>${bundle.item_count || 0}</strong></td>
+                            <td>
+                                <button onclick="toggleBundleContents(${bundle.id})" style="background: #17a2b8;">Expand Items</button>
+                                <button onclick="deleteDeployBundle(${bundle.id})" class="btn-danger" style="margin-left: 5px;">Delete</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } catch (error) { console.error('Error fetching bundles', error); }
+        }
+
+        async function createDeployBundle() {
+            const name = document.getElementById('newBundleName').value.trim();
+            const description = document.getElementById('newBundleDesc').value.trim();
+            if (!name) return alert("Bundle name is required.");
+            try {
+                const res = await fetch('/api/admin/deploy-bundles', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, description })
+                });
+                if (res.ok) {
+                    document.getElementById('newBundleName').value = '';
+                    document.getElementById('newBundleDesc').value = '';
+                    fetchBundles();
+                } else { const err = await res.json(); alert("Error: " + err.error); }
+            } catch (error) { alert("Network error."); }
+        }
+
+        async function deleteDeployBundle(bundleId) {
+            if(!confirm("Are you sure you want to delete this Deploy Bundle? It will be removed from all assigned groups.")) return;
+            try {
+                const res = await fetch(`/api/admin/deploy-bundles/${bundleId}`, { method: 'DELETE' });
+                if (res.ok) { await fetchBundles(); } 
+                else { alert("Failed to delete bundle."); }
+            } catch (err) { alert("Network error."); }
+        }
+        
+        // --- EXPAND BUNDLES & REMOVE ITEMS ---
+        async function toggleBundleContents(bundleId) {
+            const rowId = `bundle-contents-${bundleId}`;
+            const existingRow = document.getElementById(rowId);
+            
+            // Toggle visibility if it already exists
+            if (existingRow) {
+                existingRow.style.display = existingRow.style.display === 'none' ? 'table-row' : 'none';
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/admin/deploy-bundles/${bundleId}/items`);
+                const items = await res.json();
+                
+                let itemsHtml = `<table class="nested-table"><thead><tr><th>App Name</th><th>Package ID</th><th style="width: 80px;">Action</th></tr></thead><tbody>`;
+                if(items.length === 0) {
+                    itemsHtml += `<tr><td colspan="3" style="text-align:center; color:#666;">No apps assigned to this bundle yet.</td></tr>`;
+                } else {
+                    items.forEach(item => {
+                        const safePkg = encodeURIComponent(item.package_id);
+                        itemsHtml += `
+                            <tr>
+                                <td><strong>${item.name}</strong></td>
+                                <td style="font-family: monospace; color:#555;">${item.package_id}</td>
+                                <td><button class="btn-danger" style="padding:4px 8px; font-size:0.8em;" onclick="removeAppFromBundle(${bundleId}, '${safePkg}')">Remove</button></td>
+                            </tr>
+                        `;
+                    });
+                }
+                itemsHtml += `</tbody></table>`;
+
+                const tr = document.createElement('tr');
+                tr.id = rowId;
+                tr.innerHTML = `<td colspan="4" style="background:#f1f3f5; padding: 10px 20px;">${itemsHtml}</td>`;
+                
+                const parentRow = document.getElementById(`bundle-row-${bundleId}`);
+                parentRow.parentNode.insertBefore(tr, parentRow.nextSibling);
+            } catch (err) {
+                alert("Failed to load bundle contents.");
+            }
+        }
+
+        async function removeAppFromBundle(bundleId, encodedPackageId) {
+            if(!confirm("Remove this app from the bundle?")) return;
+            try {
+                const res = await fetch(`/api/admin/deploy-bundles/${bundleId}/items/${encodedPackageId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    // Refresh the view
+                    document.getElementById(`bundle-contents-${bundleId}`).remove();
+                    await fetchBundles();
+                    toggleBundleContents(bundleId);
+                } else { alert("Failed to remove item."); }
+            } catch (error) { alert("Network error."); }
+        }
+
+        // --- CATALOG LOGIC & DELETION ---
+        async function fetchCatalog() {
+            try {
+                const response = await fetch('/api/admin/catalog');
+                const catalog = await response.json();
+                const tbody = document.getElementById('catalogTableBody');
+                tbody.innerHTML = ''; 
+
+                if (catalog.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No packages synced yet.</td></tr>';
+                    return;
+                }
+
+                catalog.forEach(pkg => {
+                    const safeName = pkg.name.replace(/'/g, "\\'");
+                    const safePkg = encodeURIComponent(pkg.package_id);
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><strong>${pkg.name}</strong><br><small style="color:#666;">${pkg.package_id}</small></td>
+                            <td>${pkg.version}</td>
+                            <td style="font-family: monospace; font-size: 0.8em;">${pkg.silent_flags || 'Auto-fallback'}</td>
+                            <td>
+                                <button onclick="openDeployModal('${pkg.package_id}')" style="background: #007bff; margin-right: 5px; margin-bottom: 5px;">Deploy</button>
+                                <button onclick="openBundleModal('${pkg.package_id}', '${safeName}')" style="background: #6f42c1; margin-right: 5px; margin-bottom: 5px;">Add to Bundle</button>
+                                <button onclick="deleteFromCatalog('${safePkg}')" class="btn-danger" style="margin-bottom: 5px;">Delete</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } catch (error) { console.error('Error:', error); }
+        }
+
+        async function deleteFromCatalog(encodedPackageId) {
+            if(!confirm("Are you sure you want to delete this app from the catalog? It will also be removed from any bundles it belongs to.")) return;
+            try {
+                const res = await fetch(`/api/admin/catalog/${encodedPackageId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    fetchCatalog();
+                    fetchBundles(); // Re-fetch bundles to update counts
+                } else { alert("Failed to delete application."); }
+            } catch (err) { alert("Network error."); }
+        }
+
+        // --- BUNDLE ASSIGNMENT LOGIC ---
+        async function openBundleModal(packageId, packageName) {
+            currentAssignPackage = packageId;
+            document.getElementById('assignTargetName').innerText = packageName;
+            const container = document.getElementById('bundleListContainer');
+            container.innerHTML = '<p style="margin: 0; color: #666;">Loading bundles...</p>';
+            document.getElementById('bundleAssignModal').style.display = 'flex';
+
+            try {
+                const res = await fetch(`/api/admin/deploy-bundles/assignments/${encodeURIComponent(packageId)}`);
+                const activeAssignments = await res.json();
+
+                container.innerHTML = '';
+                if (allDeployBundles.length === 0) {
+                    container.innerHTML = '<p style="color: #dc3545;">No bundles exist. Create one first.</p>'; return;
+                }
+                allDeployBundles.forEach(bundle => {
+                    const isChecked = activeAssignments.includes(bundle.id) ? 'checked' : '';
+                    container.innerHTML += `
+                        <div style="margin-bottom: 8px;">
+                            <input type="checkbox" class="bundle-cb" id="bundle_${bundle.id}" value="${bundle.id}" ${isChecked}>
+                            <label for="bundle_${bundle.id}" style="cursor: pointer;">${bundle.name}</label>
+                        </div>
+                    `;
+                });
+            } catch (error) { container.innerHTML = '<p style="color: #dc3545;">Error loading data.</p>'; }
+        }
+
+        function closeBundleModal() { document.getElementById('bundleAssignModal').style.display = 'none'; currentAssignPackage = ''; }
+
+        async function saveBundleAssignments() {
+            const checkboxes = document.querySelectorAll('.bundle-cb:checked');
+            const bundleIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+            try {
+                const res = await fetch('/api/admin/deploy-bundles/assign', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ packageId: currentAssignPackage, bundleIds })
+                });
+                if (res.ok) { closeBundleModal(); fetchBundles(); } 
+                else { alert("Failed to save assignments."); }
+            } catch (error) { alert("Network error."); }
+        }
+
+        // --- WINGET SEARCH / MANUAL SYNC / DEVICE DEPLOY LOGIC ---
+        async function searchWinGet() {
+            const query = document.getElementById('searchInput').value;
+            if (!query) return;
+            const btn = event.target; btn.innerText = "Searching..."; btn.disabled = true;
+            try {
+                const response = await fetch(`/api/admin/search?q=${encodeURIComponent(query)}`);
+                const results = await response.json();
+                const tbody = document.getElementById('searchResultsBody');
+                tbody.innerHTML = '';
+                if (results.length === 0 || results.error) tbody.innerHTML = `<tr><td colspan="2">${results.error || 'No packages found.'}</td></tr>`;
+                else results.forEach(pkgId => tbody.innerHTML += `<tr><td><input type="checkbox" class="search-cb" value="${pkgId}"></td><td style="font-family: monospace;">${pkgId}</td></tr>`);
+                document.getElementById('searchResultsContainer').style.display = 'block';
+            } catch (err) { alert("Search failed."); }
+            btn.innerText = "Search GitHub"; btn.disabled = false;
+        }
+
+        async function syncSelected() {
+            const checkboxes = document.querySelectorAll('.search-cb:checked');
+            if (checkboxes.length === 0) return alert("Select at least one package.");
+            const btn = event.target; btn.innerText = "Syncing..."; btn.disabled = true;
+            let successCount = 0;
+            for (const cb of checkboxes) {
+                try {
+                    const response = await fetch('/api/admin/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ packageId: cb.value }) });
+                    if (response.ok) successCount++;
+                } catch (e) {}
+            }
+            alert(`Pulled ${successCount} packages!`);
+            btn.innerText = "Add Selected to Catalog"; btn.disabled = false;
+            document.getElementById('searchResultsContainer').style.display = 'none';
+            fetchCatalog();
+        }
+
+        async function syncManualPackage(btn) {
+            const packageId = document.getElementById('manualPackageId').value.trim();
+            if (!packageId) return alert("Please enter an exact Package ID.");
+            const originalText = btn.innerText; btn.innerText = "Syncing..."; btn.disabled = true;
+            try {
+                const response = await fetch('/api/admin/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ packageId }) });
+                if (response.ok) { document.getElementById('manualPackageId').value = ''; fetchCatalog(); } 
+                else { const err = await response.json(); alert('Sync Error: ' + err.error); }
+            } catch (error) { alert('Network error.'); }
+            btn.innerText = originalText; btn.disabled = false;
+        }
+
+        async function openDeployModal(packageId) {
+            currentDeployPackage = packageId; document.getElementById('deployPackageName').innerText = packageId;
+            document.getElementById('deployModal').style.display = 'flex'; document.getElementById('selectAllDevices').checked = false;
+            const container = document.getElementById('deviceListContainer'); container.innerHTML = '<p style="margin: 0; color: #666;">Loading devices...</p>';
+            try {
+                const response = await fetch('/api/admin/devices'); const devices = await response.json();
+                container.innerHTML = '';
+                if (devices.length === 0) { container.innerHTML = '<p style="margin: 0; color: #dc3545;">No devices enrolled.</p>'; return; }
+                devices.forEach(device => {
+                    const isOffline = device.status !== 'Active'; const color = isOffline ? '#999' : '#000';
+                    container.innerHTML += `<div style="margin-bottom: 8px;"><input type="checkbox" class="device-cb" id="cb_${device.device_id}" value="${device.device_id}"><label for="cb_${device.device_id}" style="color: ${color}; cursor: pointer;">${device.device_name || 'Unknown'} - (${device.status})</label></div>`;
+                });
+            } catch (error) { container.innerHTML = '<p style="margin: 0; color: #dc3545;">Error loading devices.</p>'; }
+        }
+
+        function toggleAllDevices(source) { document.querySelectorAll('.device-cb').forEach(cb => cb.checked = source.checked); }
+        function closeModal() { document.getElementById('deployModal').style.display = 'none'; currentDeployPackage = ''; }
+
+        async function confirmBulkDeployment() {
+            const checkboxes = document.querySelectorAll('.device-cb:checked');
+            if (checkboxes.length === 0) return alert('Select at least one device.');
+            
+            // Extract the selected timing option
+            const timing = document.getElementById('deployTiming').value;
+
+            const btn = event.target; 
+            const originalText = btn.innerText; 
+            btn.innerText = "Queueing..."; 
+            btn.disabled = true;
+            
+            let successCount = 0; let failCount = 0;
+            
+            for (const cb of checkboxes) {
+                try {
+                    const response = await fetch('/api/admin/deploy', { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' }, 
+                        // Include the installTiming flag in the payload
+                        body: JSON.stringify({ 
+                            deviceId: cb.value, 
+                            packageId: currentDeployPackage,
+                            installTiming: timing 
+                        }) 
+                    });
+                    if (response.ok) successCount++; else failCount++;
+                } catch (error) { failCount++; }
+            }
+            
+            alert(`Queued deployment to ${successCount} device(s). ${failCount > 0 ? `(${failCount} failed)` : ''}`);
+            closeModal(); 
+            btn.innerText = originalText; 
+            btn.disabled = false;
+        }
+
+        // Init
+        fetchBundles();
+        fetchCatalog();
+    </script>
+    <script src="/js/layout.js"></script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+# =========================
+# Node.js Backend
+# =========================
+Server/node_modules/
+Server/npm-debug.log
+Server/.env
+Server/minidm.db
+Server/minidm.db-journal
+
+# =========================
+# C# .NET 10 Agent
+# =========================
+Agent/bin/
+Agent/obj/
+Agent/TestResults/
+*.user
+*.suo
+
+# =========================
+# OS / IDE Files
+# =========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

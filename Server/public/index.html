@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MiniDM | Open-Source Device Management</title>
+    <style>
+        /* Base Styles */
+        :root {
+            --primary: #007bff;
+            --primary-dark: #0056b3;
+            --bg-light: #f8f9fa;
+            --text-main: #333;
+            --text-muted: #6c757d;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            color: var(--text-main);
+            line-height: 1.6;
+        }
+        a { text-decoration: none; color: inherit; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+        
+        /* Navigation */
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+        }
+        .logo { font-size: 1.5rem; font-weight: bold; color: var(--primary); }
+        .nav-links a { margin-left: 20px; font-weight: 500; }
+        .nav-links a:hover { color: var(--primary); }
+        .btn-nav { background: var(--text-main); color: white; padding: 8px 16px; border-radius: 4px; margin-left: 20px; }
+
+        /* Hero Section */
+        .hero {
+            background: var(--bg-light);
+            padding: 80px 0 100px;
+            text-align: center;
+            border-bottom: 1px solid #eaeaea;
+        }
+        .hero h1 { font-size: 3rem; margin-bottom: 20px; color: #111; }
+        .hero p { font-size: 1.2rem; color: var(--text-muted); max-width: 600px; margin: 0 auto 30px; }
+        .btn-primary { background: var(--primary); color: white; padding: 12px 24px; border-radius: 6px; font-size: 1.1rem; font-weight: bold; display: inline-block; transition: 0.2s; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-secondary { border: 2px solid var(--text-main); color: var(--text-main); padding: 10px 24px; border-radius: 6px; font-size: 1.1rem; font-weight: bold; display: inline-block; margin-left: 10px; transition: 0.2s; }
+        .btn-secondary:hover { background: var(--text-main); color: white; }
+
+        /* Features Section */
+        .features { padding: 80px 0; }
+        .section-title { text-align: center; font-size: 2rem; margin-bottom: 50px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 40px; }
+        .feature-card { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border: 1px solid #eaeaea; }
+        .feature-icon { font-size: 2rem; margin-bottom: 15px; }
+        .feature-card h3 { margin-top: 0; color: var(--primary); }
+
+        /* Architecture Details */
+        .architecture { background: var(--text-main); color: white; padding: 80px 0; }
+        .architecture h2 { color: white; }
+        .arch-content { display: flex; flex-wrap: wrap; gap: 40px; align-items: center; }
+        .arch-text { flex: 1; min-width: 300px; }
+        .arch-text ul { list-style-type: none; padding: 0; }
+        .arch-text li { margin-bottom: 15px; padding-left: 25px; position: relative; }
+        .arch-text li::before { content: '✓'; color: var(--primary); position: absolute; left: 0; font-weight: bold; }
+        .code-window { flex: 1; min-width: 300px; background: #1e1e1e; padding: 20px; border-radius: 8px; font-family: monospace; color: #d4d4d4; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        
+        /* Footer */
+        footer { text-align: center; padding: 40px 0; color: var(--text-muted); border-top: 1px solid #eaeaea; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <nav>
+            <div class="logo">MiniDM</div>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#security">Security</a>
+                <a href="/dashboard" class="btn-nav">Login</a>
+            </div>
+        </nav>
+    </div>
+
+    <section class="hero">
+        <div class="container">
+            <h1>Device Management, <br>Uncomplicated.</h1>
+            <p>An open-source, cross-platform MDM solution designed for administrators who want total control without the enterprise bloat.</p>
+        </div>
+    </section>
+
+    <section id="features" class="features container">
+        <h2 class="section-title">Why Choose MiniDM?</h2>
+        <div class="grid">
+            <div class="feature-card">
+                <div class="feature-icon">🚀</div>
+                <h3>Lightweight Backend</h3>
+                <p>Powered by a blazing-fast Node.js and Express server with a zero-config SQLite persistence layer. Deploy in seconds, not days.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🛡️</div>
+                <h3>Defense-in-Depth</h3>
+                <p>Features Trust On First Use (TOFU) enrollment. Cryptographic keys and server states are locked inside the local Windows DPAPI vault.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">⚡</div>
+                <h3>Tamper-Proof Execution</h3>
+                <p>Say goodbye to arbitrary shell injection. Agents only execute strongly-typed, pre-compiled commands (JSON), ensuring rock-solid stability.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="security" class="architecture">
+        <div class="container">
+            <h2 class="section-title" style="margin-bottom: 40px;">Zero-Trust Architecture Built-In</h2>
+            <div class="arch-content">
+                <div class="arch-text">
+                    <p>MiniDM doesn't just assume a device is friendly. Every single command and heartbeat is mathematically verified.</p>
+                    <ul>
+                        <li><strong>Mutual Authentication:</strong> Both the C# Agent and Node Server utilize local RSA-2048 key pairs to verify each other's identity on every check-in.</li>
+                        <li><strong>Payload Signing:</strong> Commands queued in the admin dashboard are hashed (SHA256) and signed by the server's private key before transit.</li>
+                        <li><strong>Burn The Bridge:</strong> Initial deployment registry keys are permanently destroyed after successful cryptographic enrollment.</li>
+                    </ul>
+                </div>
+                <div class="code-window">
+// C# Agent Signature Verification
+if (VerifySignature(payload, sig, ServerKey))
+{
+    Console.WriteLine("Signature valid.");
+    ExecuteCommand(payload);
+}
+else
+{
+    // Drop connection, log attempt
+    DropPayload(); 
+}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 The MiniDM Project. Released under the GPLv3 License.</p>
+        </div>
+    </footer>
+
+</body>
+</html>

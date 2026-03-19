@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MiniDM - Settings</title>
+    
+    <script>
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    </script>
+
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h2 style="margin-top: 0; border-bottom: 2px solid #007bff; padding-bottom: 10px;">Security Settings</h2>
+        
+        <div id="alertBox" class="alert"></div>
+
+        <form id="passwordForm" onsubmit="updatePassword(event)">
+            <div class="form-group">
+                <label for="currentPassword">Current Password</label>
+                <input type="password" id="currentPassword" required>
+            </div>
+            <div class="form-group">
+                <label for="newPassword">New Password</label>
+                <input type="password" id="newPassword" required minlength="8">
+            </div>
+            <div class="form-group">
+                <label for="confirmPassword">Confirm New Password</label>
+                <input type="password" id="confirmPassword" required minlength="8">
+            </div>
+            <button type="submit" id="submitBtn">Update Password</button>
+        </form>
+    </div>
+
+    <script>
+        function showAlert(message, isSuccess) {
+            const alertBox = document.getElementById('alertBox');
+            alertBox.innerText = message;
+            alertBox.className = `alert ${isSuccess ? 'alert-success' : 'alert-danger'}`;
+            alertBox.style.display = 'block';
+        }
+
+        async function updatePassword(event) {
+            event.preventDefault();
+            
+            const currentPassword = document.getElementById('currentPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+
+            if (newPassword !== confirmPassword) {
+                return showAlert("New passwords do not match.", false);
+            }
+
+            const btn = document.getElementById('submitBtn');
+            btn.innerText = "Updating...";
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/api/admin/password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ currentPassword, newPassword })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showAlert("Password updated successfully!", true);
+                    document.getElementById('passwordForm').reset();
+                } else {
+                    showAlert(data.error || "Failed to update password.", false);
+                }
+            } catch (err) {
+                showAlert("Network error occurred.", false);
+            }
+
+            btn.innerText = "Update Password";
+            btn.disabled = false;
+        }
+
+    </script>
+    <script src="/js/layout.js"></script>
+</body>
+</html>

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MiniDM - Dashboard</title>
+    
+    <script>
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    </script>
+
+    <link rel="stylesheet" href="/css/styles.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1 style="margin-top: 0;">Welcome to MiniDM</h1>
+        <p style="color: var(--text-muted); border-bottom: 2px solid var(--primary); padding-bottom: 10px;">Your open-source mobile device management overview.</p>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3 id="deviceCount">-</h3>
+                <p>Total Enrolled Devices</p>
+                <a href="/devices" style="display: block; margin-top: 10px; color: var(--primary); text-decoration: none; font-size: 0.9em;">Manage Fleet &rarr;</a>
+            </div>
+            <div class="stat-card">
+                <h3 id="appCount">-</h3>
+                <p>Cached Applications</p>
+                <a href="/apps" style="display: block; margin-top: 10px; color: var(--primary); text-decoration: none; font-size: 0.9em;">View Catalog &rarr;</a>
+            </div>
+        </div>
+
+        <div class="stats-grid" style="margin-top: 30px;">
+            <div class="stat-card" style="flex: 1;">
+                <h4 style="margin: 0 0 10px 0;">Device Enrollment Status</h4>
+                <div class="chart-container">
+                    <canvas id="deviceChart"></canvas>
+                </div>
+            </div>
+            <div class="stat-card" style="flex: 2;">
+                <h4 style="margin: 0 0 10px 0;">Task Execution Telemetry</h4>
+                <div class="chart-container">
+                    <canvas id="telemetryChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let deviceChartInstance = null;
+        let telemetryChartInstance = null;
+
+        // Custom plugin to adjust Chart.js text colors based on Dark/Light mode
+        Chart.defaults.color = document.documentElement.getAttribute('data-theme') === 'dark' ? '#a0a0a0' : '#666';
+
+        async function fetchHighLevelStats() {
+            try {
+                const [devicesRes, appsRes] = await Promise.all([
+                    fetch('/api/admin/devices'),
+                    fetch('/api/admin/catalog')
+                ]);
+                const devices = await devicesRes.json();
+                const apps = await appsRes.json();
+                
+                document.getElementById('deviceCount').innerText = devices.length;
+                document.getElementById('appCount').innerText = apps.length;
+            } catch (error) {
+                console.error("Failed to fetch high-level stats.");
+            }
+        }
+
+        async function renderCharts() {
+            try {
+                const res = await fetch('/api/admin/stats/charts');
+                const data = await res.json();
+
+                // Process Device Data
+                let activeCount = 0; let pendingCount = 0;
+                data.deviceStats.forEach(row => {
+                    if (row.status === 'Active') activeCount = row.count;
+                    if (row.status === 'Pending') pendingCount = row.count;
+                });
+
+                // Render Device Doughnut Chart
+                const ctxDevice = document.getElementById('deviceChart').getContext('2d');
+                if (deviceChartInstance) deviceChartInstance.destroy();
+                
+                deviceChartInstance = new Chart(ctxDevice, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Active', 'Pending Approval'],
+                        datasets: [{
+                            data: [activeCount, pendingCount],
+                            backgroundColor: ['#28a745', '#ffc107'],
+                            borderColor: document.documentElement.getAttribute('data-theme') === 'dark' ? '#252525' : '#fff',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                });
+
+                // Process Telemetry Data
+                let queued = 0, sent = 0, completed = 0, failed = 0, pendingReboot = 0;
+                data.telemetryStats.forEach(row => {
+                    if (row.status === 'Queued') queued = row.count;
+                    if (row.status === 'Sent') sent = row.count;
+                    if (row.status === 'Completed') completed = row.count;
+                    if (row.status === 'Failed') failed = row.count;
+                    if (row.status === 'PendingReboot') pendingReboot = row.count;
+                });
+
+                // Render Telemetry Bar Chart
+                const ctxTelemetry = document.getElementById('telemetryChart').getContext('2d');
+                if (telemetryChartInstance) telemetryChartInstance.destroy();
+
+                telemetryChartInstance = new Chart(ctxTelemetry, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Queued', 'Sent', 'Pending Reboot', 'Completed', 'Failed'],
+                        datasets: [{
+                            label: 'Tasks',
+                            data: [queued, sent, pendingReboot, completed, failed],
+                            backgroundColor: ['#6c757d', '#17a2b8', '#ffc107', '#28a745', '#dc3545'],
+                            borderRadius: 4
+                        }]
+                    },
+                    options: { 
+                        maintainAspectRatio: false, 
+                        plugins: { legend: { display: false } },
+                        scales: { 
+                            y: { beginAtZero: true, ticks: { stepSize: 1 } },
+                            x: { grid: { display: false } }
+                        }
+                    }
+                });
+
+            } catch (err) {
+                console.error("Failed to load chart data:", err);
+            }
+        }
+
+        // Initialize Page
+        fetchHighLevelStats();
+        renderCharts();
+        setInterval(renderCharts, 15000);
+    </script>
+
+    <script src="/js/layout.js"></script>
+</body>
+</html>

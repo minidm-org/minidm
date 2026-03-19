@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MiniDM - Devices</title>
+    
+    <script>
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    </script>
+
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <div class="container">
+    <h2 style="margin-top: 0; border-bottom: 2px solid #007bff; padding-bottom: 10px;">Enrollment Configuration</h2>
+    <div style="background: #e9ecef; padding: 20px; border-radius: 6px; border: 1px solid #ccc; display: flex; flex-direction: column; gap: 15px;">
+        
+        <div>
+            <strong style="color: #333;">Active Enrollment Key:</strong> 
+            <span id="uiEnrollmentKey" style="font-family: monospace; background: #fff; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; color: #d63384; font-weight: bold; margin-left: 10px;">Loading...</span>
+        </div>
+        
+        <div>
+            <strong style="color: #333; display: block; margin-bottom: 5px;">PowerShell Deployment Command (Run as Admin):</strong> 
+            <input type="text" id="uiDeployCommand" readonly onclick="this.select()" style="width: 100%; font-family: monospace; font-size: 0.9em; padding: 10px; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: copy;" title="Click to select">
+            <small style="color: #666; display: block; margin-top: 5px;">This URL dynamically generates the setup script based on your active key.</small>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 5px;">
+            <button onclick="downloadScript()" style="background: #28a745; font-weight: bold;">&#11123; Download deploy.ps1</button>
+            <button onclick="regenerateKey()" class="btn-danger" style="margin-left: auto;">&#9881; Regenerate Key</button>
+        </div>
+    </div>
+</div>
+
+    <div class="container">
+        <h2 style="margin-top: 0; border-bottom: 2px solid #007bff; padding-bottom: 10px;">Device Groups</h2>
+        
+        <div style="display: flex; gap: 10px; margin-bottom: 15px; background: #f8f9fa; padding: 15px; border-radius: 6px; border: 1px solid #ddd;">
+            <input type="text" id="newGroupName" placeholder="Group Name (e.g., Kiosk Devices)" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+            <input type="text" id="newGroupDesc" placeholder="Description (Optional)" style="flex: 2; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+            <button onclick="createGroup()" style="background: #28a745; padding: 8px 15px;">Create Group</button>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Group Name</th>
+                    <th>Description</th>
+                    <th>Device Count</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="groupTableBody">
+                <tr><td colspan="4" style="text-align:center;">Loading groups...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="container">
+        <h2 style="margin-top: 0; border-bottom: 2px solid #007bff; padding-bottom: 10px;">Device Fleet</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Device Name</th>
+                    <th>Device ID</th>
+                    <th>Status</th>
+                    <th>Processor</th>
+                    <th>RAM (MB)</th>
+                    <th>Last Seen</th> 
+                    <th>Group</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="deviceTableBody"></tbody>
+        </table>
+    </div>
+
+    <div id="groupBundleModal" class="modal-overlay">
+        <div class="modal-box">
+            <h3>Assign Bundles to Group</h3>
+            <p>Configuring bundle assignments for: <strong id="assignGroupName"></strong></p>
+            
+            <h4 style="margin-bottom: 5px;">Software Deploy Bundles</h4>
+            <div id="deployBundleList" class="scrollable-list"></div>
+
+            <h4 style="margin-bottom: 5px;">Policy Bundles</h4>
+            <div id="policyBundleList" class="scrollable-list"></div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                <button onclick="closeGroupBundleModal()" style="background: #6c757d;">Cancel</button>
+                <button onclick="saveGroupBundles()" style="background: #28a745;">Save Group Config</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let allGroups = [];
+        let allDeployBundles = [];
+        let allPolicyBundles = [];
+        let currentAssignGroupId = null;
+        let currentDeployUrl = '';
+
+        // Fetch the active key and generate the UI links
+        async function fetchTenantConfig() {
+            try {
+                const res = await fetch('/api/admin/tenant');
+                if (res.ok) {
+                    const data = await res.json();
+                    document.getElementById('uiEnrollmentKey').innerText = data.enrollmentKey;
+                    
+                    // Build the dynamic URL using the current domain
+                    currentDeployUrl = `${window.location.origin}/api/deploy/${data.deployCode}/deploy.ps1`;
+                    
+                    // Create a handy PowerShell one-liner for immediate execution (irm = Invoke-RestMethod, iex = Invoke-Expression)
+                    document.getElementById('uiDeployCommand').value = `irm ${currentDeployUrl} | iex`;
+                }
+            } catch (err) {
+                console.error("Failed to load tenant configuration.");
+            }
+        }
+
+        // Download the script directly
+        function downloadScript() {
+            if (currentDeployUrl) {
+                window.open(currentDeployUrl, '_blank');
+            }
+        }
+
+        // Rotate the enrollment key
+        async function regenerateKey() {
+            if(!confirm("WARNING: Regenerating the key will immediately invalidate the current deployment script and URL. Existing devices will remain enrolled, but new devices must use the new key.\n\nProceed?")) return;
+            
+            const btn = event.target;
+            const originalText = btn.innerText;
+            btn.innerText = "Regenerating...";
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/admin/tenant/regenerate', { method: 'POST' });
+                if (res.ok) {
+                    await fetchTenantConfig(); // Refresh the UI
+                    alert("Key regenerated successfully.");
+                } else {
+                    alert("Failed to regenerate key.");
+                }
+            } catch (err) {
+                alert("Network error.");
+            }
+
+            btn.innerText = originalText;
+            btn.disabled = false;
+        }
+
+        // --- FETCH GLOBALS (Bundles needed for the modal & expanded views) ---
+        async function fetchAllBundles() {
+            try {
+                const [deployRes, policyRes] = await Promise.all([
+                    fetch('/api/admin/deploy-bundles'),
+                    fetch('/api/admin/policy-bundles')
+                ]);
+                allDeployBundles = await deployRes.json();
+                allPolicyBundles = await policyRes.json();
+            } catch (err) { console.error("Failed to load bundles."); }
+        }
+
+        // --- GROUP MANAGEMENT ---
+        async function fetchGroups() {
+            try {
+                const response = await fetch('/api/admin/groups');
+                allGroups = await response.json();
+                const tbody = document.getElementById('groupTableBody');
+                tbody.innerHTML = '';
+
+                if (allGroups.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#666;">No groups created yet.</td></tr>';
+                    return;
+                }
+
+                allGroups.forEach(group => {
+                    const safeName = group.name.replace(/'/g, "\\'");
+                    const row = document.createElement('tr');
+                    row.id = `group-row-${group.id}`;
+                    row.innerHTML = `
+                        <td><strong>${group.name}</strong></td>
+                        <td style="color:#555;">${group.description || '-'}</td>
+                        <td><strong>${group.device_count || 0}</strong></td>
+                        <td>
+                            <button onclick="toggleGroupContents(${group.id}, '${safeName}')" style="background: #17a2b8;">Manage</button>
+                            <button onclick="enforceGroupState(${group.id}, '${safeName}')" style="background: #e0a800; color: #333; margin-left: 5px;">Enforce State</button>
+                            <button onclick="deleteGroup(${group.id})" class="btn-danger" style="margin-left: 5px;">Delete</button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) { console.error('Error fetching groups:', error); }
+        }
+
+        async function createGroup() {
+            const nameInput = document.getElementById('newGroupName');
+            const descInput = document.getElementById('newGroupDesc');
+            const name = nameInput.value.trim();
+            const description = descInput.value.trim();
+            if (!name) return alert("Group name is required.");
+
+            const btn = event.target; btn.innerText = "Creating..."; btn.disabled = true;
+            try {
+                const res = await fetch('/api/admin/groups', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, description })
+                });
+                if (res.ok) {
+                    nameInput.value = ''; descInput.value = '';
+                    await fetchGroups(); await fetchDevices();  
+                } else { const err = await res.json(); alert("Error: " + err.error); }
+            } catch (error) { alert("Network error."); }
+            btn.innerText = "Create Group"; btn.disabled = false;
+        }
+
+        async function deleteGroup(groupId) {
+            if(!confirm("Are you sure you want to delete this group? Devices will become unassigned, but will NOT be deleted.")) return;
+            try {
+                const res = await fetch(`/api/admin/groups/${groupId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    await fetchGroups();
+                    await fetchDevices(); // Refresh dropdowns
+                } else { alert("Failed to delete group."); }
+            } catch (err) { alert("Network error."); }
+        }
+
+
+        // --- EXPANDED GROUP MANAGEMENT ---
+        async function toggleGroupContents(groupId, groupName) {
+            const rowId = `group-contents-${groupId}`;
+            const existingRow = document.getElementById(rowId);
+            
+            if (existingRow) {
+                existingRow.style.display = existingRow.style.display === 'none' ? 'table-row' : 'none';
+                return;
+            }
+
+            try {
+                // Fetch nested data
+                const devRes = await fetch(`/api/admin/groups/${groupId}/devices`);
+                const groupDevices = await devRes.json();
+                const bunRes = await fetch(`/api/admin/groups/${groupId}/bundles`);
+                const assignments = await bunRes.json();
+
+                const assignedDeploy = allDeployBundles.filter(b => assignments.deployBundles.includes(b.id));
+                const assignedPolicy = allPolicyBundles.filter(b => assignments.policyBundles.includes(b.id));
+
+                let html = `<div style="display: flex; gap: 20px; padding: 15px; background: #f1f3f5; border: 1px solid #ddd; border-radius: 4px;">`;
+
+                // --- Left Column: Devices ---
+                html += `<div style="flex: 1;">
+                    <h4 style="margin-top: 0; border-bottom: 2px solid #ccc; padding-bottom: 5px;">Enrolled Devices</h4>
+                    <table class="nested-table">
+                        <thead><tr><th>Device Name</th><th>Device ID</th><th style="width: 80px;">Action</th></tr></thead>
+                        <tbody>`;
+                if (groupDevices.length === 0) {
+                    html += `<tr><td colspan="3" style="text-align:center; color:#666;">No devices assigned.</td></tr>`;
+                } else {
+                    groupDevices.forEach(d => {
+                        html += `<tr>
+                            <td><strong>${d.device_name || 'Unknown'}</strong></td>
+                            <td style="font-family: monospace;">${d.device_id.substring(0,8)}...</td>
+                            <td><button class="btn-danger" style="padding: 4px 8px; font-size: 0.8em;" onclick="removeDeviceFromGroup(${groupId}, '${d.device_id}', '${groupName}')">Remove</button></td>
+                        </tr>`;
+                    });
+                }
+                html += `</tbody></table></div>`;
+
+                // --- Right Column: Bundles ---
+                html += `<div style="flex: 1; border-left: 1px solid #ccc; padding-left: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #ccc; padding-bottom: 5px; margin-bottom: 10px;">
+                        <h4 style="margin: 0;">Assigned Bundles</h4>
+                        <button onclick="openGroupBundleModal(${groupId}, '${groupName}')" style="background: #6f42c1; padding: 4px 8px; font-size: 0.8em;">Add / Modify Bundles</button>
+                    </div>`;
+
+                html += `<h5 style="margin: 10px 0 5px 0; color: #333;">Software Deploy Bundles</h5><ul style="margin-top:0; padding-left: 20px;">`;
+                if (assignedDeploy.length === 0) html += `<li style="color:#666; font-size: 0.9em;">None assigned.</li>`;
+                assignedDeploy.forEach(b => html += `<li style="font-size: 0.9em;"><strong>${b.name}</strong></li>`);
+                html += `</ul>`;
+
+                html += `<h5 style="margin: 10px 0 5px 0; color: #333;">Policy Bundles</h5><ul style="margin-top:0; padding-left: 20px;">`;
+                if (assignedPolicy.length === 0) html += `<li style="color:#666; font-size: 0.9em;">None assigned.</li>`;
+                assignedPolicy.forEach(b => html += `<li style="font-size: 0.9em;"><strong>${b.name}</strong></li>`);
+                html += `</ul></div></div>`;
+
+                // Inject into table
+                const tr = document.createElement('tr');
+                tr.id = rowId;
+                tr.innerHTML = `<td colspan="4" style="padding: 0;">${html}</td>`;
+                
+                const parentRow = document.getElementById(`group-row-${groupId}`);
+                parentRow.parentNode.insertBefore(tr, parentRow.nextSibling);
+
+            } catch (err) { alert("Failed to load group details."); }
+        }
+
+        async function removeDeviceFromGroup(groupId, deviceId, groupName) {
+            if(!confirm("Are you sure you want to remove this device from the group?")) return;
+            try {
+                const res = await fetch(`/api/admin/groups/${groupId}/devices/${deviceId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    // 1. Rebuild the main tables (this automatically clears the expanded nested row)
+                    await fetchGroups();
+                    await fetchDevices();
+                    
+                    // 2. Re-open the nested view so the admin doesn't lose their place
+                    toggleGroupContents(groupId, groupName);
+                } else { 
+                    alert("Failed to remove device."); 
+                }
+            } catch (err) { 
+                console.error(err);
+                alert("Network error."); 
+            }
+        }
+
+        async function enforceGroupState(groupId, groupName) {
+            if (!confirm(`Are you sure you want to enforce state for the "${groupName}" group?\n\nThis will immediately queue app installations and registry edits for all online and offline devices in this group.`)) return;
+            const btn = event.target; const originalText = btn.innerText;
+            btn.innerText = "Queueing..."; btn.disabled = true;
+            try {
+                const res = await fetch(`/api/admin/groups/${groupId}/enforce`, { method: 'POST' });
+                if (res.ok) { const data = await res.json(); alert(data.message || "State enforced successfully!"); } 
+                else { const err = await res.json(); alert("Error: " + err.error); }
+            } catch (err) { alert("Network error."); }
+            btn.innerText = originalText; btn.disabled = false;
+        }
+
+        // --- GROUP BUNDLE MODAL LOGIC ---
+        async function openGroupBundleModal(groupId, groupName) {
+            currentAssignGroupId = groupId;
+            document.getElementById('assignGroupName').innerText = groupName;
+            
+            const deployList = document.getElementById('deployBundleList');
+            const policyList = document.getElementById('policyBundleList');
+            deployList.innerHTML = '<p>Loading...</p>'; policyList.innerHTML = '<p>Loading...</p>';
+            document.getElementById('groupBundleModal').style.display = 'flex';
+
+            try {
+                const res = await fetch(`/api/admin/groups/${groupId}/bundles`);
+                const assignments = await res.json();
+
+                deployList.innerHTML = '';
+                if (allDeployBundles.length === 0) deployList.innerHTML = '<p style="color:#666;">No deploy bundles exist.</p>';
+                allDeployBundles.forEach(b => {
+                    const checked = assignments.deployBundles.includes(b.id) ? 'checked' : '';
+                    deployList.innerHTML += `<div style="margin-bottom: 8px;"><input type="checkbox" class="group-deploy-cb" id="g_dep_${b.id}" value="${b.id}" ${checked}><label for="g_dep_${b.id}" style="cursor: pointer;">${b.name}</label></div>`;
+                });
+
+                policyList.innerHTML = '';
+                if (allPolicyBundles.length === 0) policyList.innerHTML = '<p style="color:#666;">No policy bundles exist.</p>';
+                allPolicyBundles.forEach(b => {
+                    const checked = assignments.policyBundles.includes(b.id) ? 'checked' : '';
+                    policyList.innerHTML += `<div style="margin-bottom: 8px;"><input type="checkbox" class="group-policy-cb" id="g_pol_${b.id}" value="${b.id}" ${checked}><label for="g_pol_${b.id}" style="cursor: pointer;">${b.name}</label></div>`;
+                });
+
+            } catch (err) { deployList.innerHTML = '<p style="color:red;">Error loading assignments.</p>'; }
+        }
+
+        function closeGroupBundleModal() { document.getElementById('groupBundleModal').style.display = 'none'; currentAssignGroupId = null; }
+
+        async function saveGroupBundles() {
+            const deployCBs = document.querySelectorAll('.group-deploy-cb:checked');
+            const policyCBs = document.querySelectorAll('.group-policy-cb:checked');
+            
+            const payload = {
+                deployBundles: Array.from(deployCBs).map(cb => parseInt(cb.value)),
+                policyBundles: Array.from(policyCBs).map(cb => parseInt(cb.value))
+            };
+
+            const btn = event.target; const originalText = btn.innerText; btn.innerText = "Saving..."; btn.disabled = true;
+
+            try {
+                const res = await fetch(`/api/admin/groups/${currentAssignGroupId}/bundles`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    closeGroupBundleModal();
+                    
+                    // Refresh the nested view automatically if it's currently open
+                    const groupName = document.getElementById('assignGroupName').innerText;
+                    const row = document.getElementById(`group-contents-${currentAssignGroupId}`);
+                    if (row) {
+                        row.remove();
+                        toggleGroupContents(currentAssignGroupId, groupName);
+                    }
+                } else { alert("Failed to save group configuration."); }
+            } catch (err) { alert("Network error."); }
+
+            btn.innerText = originalText; btn.disabled = false;
+        }
+
+        // --- DEVICE FLEET & ASSIGNMENTS ---
+        async function fetchDevices() {
+            try {
+                if (allGroups.length === 0) await fetchGroups();
+
+                const response = await fetch('/api/admin/devices');
+                const devices = await response.json();
+                const tbody = document.getElementById('deviceTableBody');
+                tbody.innerHTML = ''; 
+
+                if (devices.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">No devices enrolled.</td></tr>';
+                    return;
+                }
+
+                devices.forEach(device => {
+                    const lastSeenDate = device.last_seen ? new Date(device.last_seen).toLocaleString() : 'Never';
+                    const statusClass = device.status === 'Active' ? 'status-active' : 'status-pending';
+
+                    let groupOptions = `<option value="">-- Unassigned --</option>`;
+                    allGroups.forEach(g => {
+                        const isSelected = (device.group_id === g.id) ? 'selected' : '';
+                        groupOptions += `<option value="${g.id}" ${isSelected}>${g.name}</option>`;
+                    });
+                    const groupDropdown = `<select onchange="assignGroup('${device.device_id}', this)">${groupOptions}</select>`;
+
+                    // --- Conditional Action Buttons ---
+                    let actionButtons = '';
+                    if (device.status === 'Pending') {
+                        actionButtons = `
+                            <button onclick="approveDevice('${device.device_id}')" style="background: #28a745; margin-bottom: 5px;">Approve</button>
+                            <button onclick="deleteDevice('${device.device_id}')" class="btn-danger">Reject</button>
+                        `;
+                    } else {
+                        actionButtons = `<button onclick="deleteDevice('${device.device_id}')" class="btn-danger">Delete</button>`;
+                    }
+
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td><strong>${device.device_name || 'Unknown'}</strong></td>
+                        <td style="font-family: monospace; font-size: 0.8em; color: #555;">${device.device_id.substring(0,8)}...</td>
+                        <td class="${statusClass}">${device.status}</td>
+                        <td style="font-size: 0.9em;">${device.processor || '-'}</td>
+                        <td style="font-size: 0.9em;">${device.ram_mb || '-'}</td>
+                        <td style="font-size: 0.9em;">${lastSeenDate}</td> 
+                        <td>${groupDropdown}</td>
+                        <td>${actionButtons}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) { console.error('Error fetching devices:', error); }
+        }
+
+        async function assignGroup(deviceId, selectElement) {
+            const groupId = selectElement.value; 
+            selectElement.disabled = true;
+            
+            try {
+                const res = await fetch('/api/admin/groups/assign', {
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ deviceId, groupId: groupId || null })
+                });
+                
+                if (res.ok) { 
+                    selectElement.style.borderColor = "#28a745"; 
+                    await fetchGroups(); // Refresh the group counts at the top
+                } else { 
+                    alert("Failed to update assignment."); 
+                    selectElement.style.borderColor = "#dc3545"; 
+                }
+            } catch (error) { 
+                alert("Network error."); 
+            }
+            selectElement.disabled = false;
+        }
+
+        // async function sendCommand(deviceId) {
+        //     const btn = event.target; btn.innerText = "Queueing..."; btn.disabled = true;
+        //     try {
+        //         const res = await fetch('/api/admin/commands', {
+        //             method: 'POST', headers: { 'Content-Type': 'application/json' },
+        //             body: JSON.stringify({ deviceId: deviceId, action: 'WriteLog', payload: { Message: 'Ping!' } })
+        //         });
+        //         if (res.ok) { btn.innerText = "Queued!"; btn.style.backgroundColor = "#28a745"; } 
+        //         else { btn.innerText = "Failed"; btn.style.backgroundColor = "#dc3545"; }
+        //     } catch (error) { btn.innerText = "Error"; }
+        //     setTimeout(() => { btn.innerText = "Ping"; btn.disabled = false; btn.style.backgroundColor = "#007bff"; }, 2000);
+        // }
+
+        async function approveDevice(deviceId) {
+            if (!confirm("Approve this device for full enrollment? It will begin processing commands immediately.")) return;
+            try {
+                const res = await fetch(`/api/admin/devices/${deviceId}/approve`, { method: 'POST' });
+                if (res.ok) {
+                    await fetchDevices(); // Refresh the table
+                } else {
+                    alert("Failed to approve device.");
+                }
+            } catch (err) { alert("Network error."); }
+        }
+
+        async function deleteDevice(deviceId) {
+            if (!confirm("Are you sure you want to completely delete this device? This action cannot be undone.")) return;
+            
+            try {
+                const res = await fetch(`/api/admin/devices/${deviceId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    await fetchDevices(); // Refresh the table
+                } else {
+                    alert("Failed to delete device.");
+                }
+            } catch (err) { 
+                alert("Network error."); 
+            }
+        }
+
+        // Initialize Data
+        async function init() {
+            await fetchAllBundles();
+            await fetchGroups();
+            await fetchDevices();
+            await fetchTenantConfig();
+        }
+
+        init();
+        setInterval(fetchDevices, 10000);
+    </script>
+    <script src="/js/layout.js"></script>
+</body>
+</html>
