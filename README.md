@@ -50,6 +50,8 @@ MiniDM is split into two core components:
    
    The dashboard will be available at http://your_server:6112/
 
+   Note: For production environments it is advised to configure the service behind a reverse proxy with SSL!
+
    Default login is: admin / password123%
 
 ---
