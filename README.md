@@ -74,7 +74,7 @@ Important: To install, the Agent requires that the Host and Enrollment key are c
 
 ### Deployment
 
-Administrators can dynamically generate an enrollment script directly from the MiniDM Dashboard (under the **Devices** tab). This `.ps1` script will write the active Enrollment Key and Server URL to `HKLM\SOFTWARE\MiniDM` 
+Administrators can dynamically generate an enrollment script directly from the MiniDM Dashboard (under the **Devices** tab). This `.ps1` script will write the active Enrollment Key and Server URL to `HKLM\SOFTWARE\MiniDM` - These keys are destroyed upon successful enrollment to prevent scraping the server address.
 
 ---
 
@@ -82,11 +82,6 @@ Administrators can dynamically generate an enrollment script directly from the M
 
 Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
 
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
 
 ## 📝 License
 
