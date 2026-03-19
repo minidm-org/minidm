@@ -85,6 +85,6 @@ Administrators can dynamically generate an enrollment script directly from the M
 Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
 
 
-## 📝 License
+## License
 
 Distributed under GPLv3 license. See `LICENSE` for more information.
