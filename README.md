@@ -48,15 +48,19 @@ MiniDM is split into two core components:
 4. Start the server:
    npm start
    
-   The dashboard will be available at http://localhost:3000 (or whichever port you configured). 
+   The dashboard will be available at http://[your server]:6112/
 
 ---
 
 ## 🛡️ Getting Started: The Agent
 
-The C# Agent is designed to be compiled as a single-file, self-contained executable, meaning target Windows machines do not need the .NET runtime installed.
+The C# Agent is designed to be compiled as a windows background service, but can also be compiled as a console app if desired.
 
-### Compilation
+The included .msi was build with a trial version of Advanced Installer and throws a warning for this, but can be skipped with msiexec silent switches  i.e. \qn
+
+Important: To install, the Agent requires that the Host and Enrollment key are configured in the registry first!
+
+## Compilation
 
 1. Navigate to the agent directory:
    cd ../agent
@@ -68,7 +72,7 @@ The C# Agent is designed to be compiled as a single-file, self-contained executa
 
 ### Deployment
 
-Administrators can dynamically generate an enrollment script directly from the MiniDM Dashboard (under the **Devices** tab). This `.ps1` script will write the active Enrollment Key and Server URL to `HKLM\SOFTWARE\MiniDM` and set up the agent to run.
+Administrators can dynamically generate an enrollment script directly from the MiniDM Dashboard (under the **Devices** tab). This `.ps1` script will write the active Enrollment Key and Server URL to `HKLM\SOFTWARE\MiniDM` 
 
 ---
 
@@ -84,4 +88,4 @@ Contributions are what make the open-source community such an amazing place to l
 
 ## 📝 License
 
-Distributed under the [MIT License](LICENSE). See `LICENSE` for more information.
+Distributed under GPLv3 license. See `LICENSE` for more information.
