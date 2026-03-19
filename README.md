@@ -34,7 +34,7 @@ MiniDM is split into two core components:
 ### Installation
 
 1. Clone the repository:
-   git clone https://github.com/YourUsername/MiniDM.git
+   git clone https://github.com/minidm-org/minidm.git
    cd MiniDM/server
 
 2. Install dependencies:
@@ -48,7 +48,9 @@ MiniDM is split into two core components:
 4. Start the server:
    npm start
    
-   The dashboard will be available at http://[your server]:6112/
+   The dashboard will be available at http://your_server:6112/
+
+   Default login is: admin / password123%
 
 ---
 
@@ -56,9 +58,9 @@ MiniDM is split into two core components:
 
 The C# Agent is designed to be compiled as a windows background service, but can also be compiled as a console app if desired.
 
-The included .msi was build with a trial version of Advanced Installer and throws a warning for this, but can be skipped with msiexec silent switches  i.e. \qn
+The included .msi was built with a trial version of Advanced Installer and throws a warning for this, but can be skipped with msiexec silent switches  i.e. \qn
 
-Important: To install, the Agent requires that the Host and Enrollment key are configured in the registry first!
+Important: To install, the Agent requires that the Host and Enrollment key are configured in the registry first! You obtain these from your server instance.
 
 ## Compilation
 
