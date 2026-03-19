@@ -4,7 +4,6 @@
 
 MiniDM is a lightweight but powerful endpoint management platform. It combines a high-concurrency Node.js server with a highly privileged, resilient C# .NET background agent. Designed for IT admins, homelabbers, and MSPs who want total control over their infrastructure without paying exorbitant per-device licensing fees.
 
-![MiniDM Dashboard](https://via.placeholder.com/800x400?text=MiniDM+Dashboard+Screenshot) *(Tip: Replace this URL with an actual screenshot of your beautiful Chart.js dashboard!)*
 
 ## ✨ Key Features
 
