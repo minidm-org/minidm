@@ -1,11 +1,11 @@
-# 📱 MiniDM
+# MiniDM
 
-**An open-source, self-hosted Mobile Device Management (MDM) solution for Windows fleets.**
+**An open-source, self-hosted Mobile Device Management (MDM) solution for Windows 11.**
 
-MiniDM is a lightweight but powerful endpoint management platform. It combines a high-concurrency Node.js server with a highly privileged, resilient C# .NET background agent. Designed for IT admins, homelabbers, and MSPs who want total control over their infrastructure without paying exorbitant per-device licensing fees.
+MiniDM is a lightweight but powerful endpoint management platform. It combines a high-concurrency Node.js server with a highly privileged, resilient C# .NET background agent. Designed for IT admins, homelabbers, and MSPs who want simple app and policy deployment for endpoints without paying exorbitant per-month subscription fees.
 
 
-## ✨ Key Features
+## Key Features
 
 * **WinGet "Manifest-as-a-Service" Brain:** The server actively crawls GitHub WinGet manifests, extracts vendor CDNs and SHA-256 hashes, and intelligently generates context-aware silent install flags based on the packaging engine (MSI, Inno, Nullsoft, etc.).
 * **Ironclad Execution Sandbox:** The Windows Agent forces OS-level window suppression to prevent Local Privilege Escalation (LPE) via rogue installer GUIs. A built-in 15-minute deadman's switch kills hanging processes to prevent queue lockups.
@@ -16,7 +16,7 @@ MiniDM is a lightweight but powerful endpoint management platform. It combines a
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 MiniDM is split into two core components:
 
@@ -25,7 +25,7 @@ MiniDM is split into two core components:
 
 ---
 
-## 🚀 Getting Started: The Server
+## Getting Started: The Server
 
 ### Prerequisites
 * [Node.js](https://nodejs.org/) (v18+)
@@ -52,7 +52,7 @@ MiniDM is split into two core components:
 
 ---
 
-## 🛡️ Getting Started: The Agent
+## Getting Started: The Agent
 
 The C# Agent is designed to be compiled as a windows background service, but can also be compiled as a console app if desired.
 
@@ -76,7 +76,7 @@ Administrators can dynamically generate an enrollment script directly from the M
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
 
