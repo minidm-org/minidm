@@ -60,8 +60,6 @@ MiniDM is split into two core components:
 
 The C# Agent is designed to be compiled as a windows background service, but can also be compiled as a console app if desired.
 
-The included .msi was built with a trial version of Advanced Installer and throws a warning for this, but can be skipped with msiexec silent switches  i.e. \qn
-
 Important: To install, the Agent requires that the Host and Enrollment key are configured in the registry first! You obtain these from your server instance.
 
 ## Compilation
