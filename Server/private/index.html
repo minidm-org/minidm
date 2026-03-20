@@ -48,6 +48,26 @@
         </div>
     </div>
 
+    <div class="container" style="margin-top: 30px;">
+        <h2 style="margin-top: 0; border-bottom: 2px solid var(--primary); padding-bottom: 10px;">Recent Task Queue</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Device</th>
+                    <th>Action / Target</th>
+                    <th>Status</th>
+                    <th>Queued At</th>
+                    <th>Result Detail</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="taskQueueBody">
+                <tr><td colspan="7" style="text-align:center;">Loading tasks...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
     <script>
         let deviceChartInstance = null;
         let telemetryChartInstance = null;
@@ -140,6 +160,77 @@
                 console.error("Failed to load chart data:", err);
             }
         }
+
+        async function fetchTaskQueue() {
+            try {
+                const res = await fetch('/api/admin/commands');
+                const tasks = await res.json();
+                const tbody = document.getElementById('taskQueueBody');
+                tbody.innerHTML = '';
+                
+                if (tasks.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#666;">No tasks in the queue.</td></tr>';
+                    return;
+                }
+
+                tasks.forEach(task => {
+                    const queuedDate = new Date(task.queued_at).toLocaleString();
+                    let statusColor = 'var(--text-main)';
+                    if (task.status === 'Completed') statusColor = 'var(--success)';
+                    if (task.status === 'Failed') statusColor = 'var(--danger)';
+                    if (task.status === 'Queued' || task.status === 'Sent' || task.status === 'PendingReboot') statusColor = 'var(--warning)';
+
+                    let actionHtml = '';
+                    if (task.status === 'Failed') {
+                        actionHtml = `<button onclick="retryTask(${task.id})" style="background: var(--info); padding: 4px 8px; font-size: 0.8em;">Retry</button>`;
+                    }
+
+                    // Extract the App or Policy name from the JSON payload for context
+                    let payloadSnippet = '';
+                    try {
+                        const parsed = JSON.parse(task.payload);
+                        payloadSnippet = parsed.Name || parsed.PolicyName || '-';
+                    } catch(e) { payloadSnippet = '-'; }
+
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>${task.id}</td>
+                            <td><strong>${task.device_name || 'Unknown'}</strong></td>
+                            <td>${task.action}<br><small style="color:var(--text-muted);">${payloadSnippet}</small></td>
+                            <td style="color: ${statusColor}; font-weight: bold;">${task.status}</td>
+                            <td style="font-size: 0.9em;">${queuedDate}</td>
+                            <td style="font-size: 0.8em; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${task.result_message || ''}">
+                                ${task.exit_code !== null ? `Exit: ${task.exit_code} | ` : ''}${task.result_message || '-'}
+                            </td>
+                            <td>${actionHtml}</td>
+                        </tr>
+                    `;
+                });
+            } catch (err) { console.error("Failed to load task queue:", err); }
+        }
+
+        async function retryTask(taskId) {
+            if (!confirm("Are you sure you want to re-queue this failed task?")) return;
+            try {
+                const res = await fetch(`/api/admin/commands/${taskId}/retry`, { method: 'POST' });
+                if (res.ok) {
+                    fetchTaskQueue();
+                    renderCharts(); 
+                } else {
+                    alert("Failed to retry task.");
+                }
+            } catch (err) { alert("Network error."); }
+        }
+
+        // Ensure you update the bottom of the script to call this new function
+        fetchHighLevelStats();
+        renderCharts();
+        fetchTaskQueue(); // <-- Add this
+        setInterval(() => {
+            renderCharts();
+            fetchTaskQueue(); // <-- Add this
+        }, 15000);
+
 
         // Initialize Page
         fetchHighLevelStats();

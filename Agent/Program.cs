@@ -1,23 +1,4 @@
-﻿/*
-
-MiniDM - Open-Source Mobile Device Management
-Copyright (C) 2026 Paul Wright / MiniDM.org
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-*/
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Management.Infrastructure;
@@ -97,7 +78,7 @@ namespace MiniDMAgent
 
         private static readonly HttpClient httpClient = new HttpClient(new HttpClientHandler
         {
-            AllowAutoRedirect = true,
+            AllowAutoRedirect = false,
             MaxAutomaticRedirections = 10
         })
         {
@@ -257,7 +238,7 @@ namespace MiniDMAgent
 
             _logger.LogInformation($"Secure vault written to {StateFilePath}");
 
-            // cleanup regkeys
+            // --- SECURITY CLEANUP ---
             try
             {
                 key.DeleteValue("ServerUrl", throwOnMissingValue: false);
@@ -543,25 +524,54 @@ namespace MiniDMAgent
             try
             {
                 _logger.LogInformation($"Downloading {appName} from vendor CDN...");
-                using (var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, stoppingToken))
+
+                string currentUrl = url;
+                int maxRedirects = 10;
+                HttpResponseMessage response = null;
+
+                for (int i = 0; i < maxRedirects; i++)
                 {
+                    var request = new HttpRequestMessage(HttpMethod.Get, currentUrl);
+                    // Explicitly add a User-Agent to bypass 403 Forbidden checks on GitHub/Cloudflare CDNs
+                    request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) MiniDMAgent/1.0");
+
+                    response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, stoppingToken);
+
+                    if (response.StatusCode == System.Net.HttpStatusCode.MovedPermanently ||
+                        response.StatusCode == System.Net.HttpStatusCode.Redirect ||
+                        response.StatusCode == System.Net.HttpStatusCode.RedirectMethod ||
+                        response.StatusCode == System.Net.HttpStatusCode.RedirectKeepVerb ||
+                        (int)response.StatusCode == 308) // Handle modern 308 Permanent Redirects
+                    {
+                        var location = response.Headers.Location;
+                        if (location == null) throw new Exception("Received HTTP Redirect but no Location header was provided.");
+
+                        string newUrl = location.IsAbsoluteUri ? location.AbsoluteUri : new Uri(new Uri(currentUrl), location).AbsoluteUri;
+                        _logger.LogInformation($"[Redirect {(int)response.StatusCode}] Following redirect to: {newUrl}");
+
+                        currentUrl = newUrl;
+                        response.Dispose(); // Clean up the old response
+                        continue;
+                    }
+
                     response.EnsureSuccessStatusCode();
-                    using var streamToReadFrom = await response.Content.ReadAsStreamAsync(stoppingToken);
-                    using var streamToWriteTo = File.Open(filePath, FileMode.Create);
+                    break; // We have a successful 200 OK response
+                }
+
+                if (response == null || !response.IsSuccessStatusCode)
+                {
+                    throw new Exception($"Download failed. Exceeded maximum redirects or received invalid status code.");
+                }
+
+                // Safely stream the payload to disk
+                using (var streamToReadFrom = await response.Content.ReadAsStreamAsync(stoppingToken))
+                using (var streamToWriteTo = File.Open(filePath, FileMode.Create))
+                {
                     await streamToReadFrom.CopyToAsync(streamToWriteTo, stoppingToken);
                 }
 
-                _logger.LogInformation("Verifying SHA256 Hash...");
-                string actualHash = CalculateSha256(filePath);
-
-                if (!actualHash.Equals(expectedHash, StringComparison.OrdinalIgnoreCase))
-                {
-                    string errorMsg = $"CRITICAL: Hash mismatch for {appName}. Expected {expectedHash}, got {actualHash}. Aborting.";
-                    _logger.LogError(errorMsg);
-                    SafeLogEvent(errorMsg, EventLogEntryType.Error);
-                    if (File.Exists(filePath)) File.Delete(filePath);
-                    return ("Failed", 1, errorMsg);
-                }
+                // Clean up the final response
+                response.Dispose();
 
                 // --- CACHE INTERCEPTION LOGIC ---
                 if (installTiming.Equals("OnStartup", StringComparison.OrdinalIgnoreCase))

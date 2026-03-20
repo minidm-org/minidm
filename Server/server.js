@@ -1,22 +1,3 @@
-/*
-
-MiniDM - Open-Source Mobile Device Management
-Copyright (C) 2026 Paul Wright / MiniDM.org
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-*/
 require('dotenv').config();
 const express = require('express');
 const crypto = require('crypto');
@@ -40,7 +21,7 @@ const upload = multer({
 const app = express();
 app.use(express.json());
 
-// Session Configuration
+// 1. Session Configuration
 app.use(session({
     secret: process.env.SESSION_SECRET || 'fallback-dev-secret-change-me', 
     resave: false,
@@ -51,10 +32,11 @@ app.use(session({
 // Serve static files from 'public' (where login.html lives)
 app.use(express.static('public'));
 
+//const VALID_BULK_KEY = 'SECRET-MINIDM-DEPLOY-KEY'; 
 let db; 
 let serverKeys = { publicKey: '', privateKey: '' };
 
-// Auth Middleware
+// --- Auth Middleware ---
 const requireAuth = (req, res, next) => {
     if (req.session && req.session.authenticated) {
         return next();
@@ -65,7 +47,7 @@ const requireAuth = (req, res, next) => {
     res.redirect('/login'); 
 };
 
-// Database Initialization & Key Management
+// --- Database Initialization & Key Management ---
 async function initializeServer() {
     console.log('Initializing SQLite Database...');
     
@@ -222,6 +204,17 @@ async function initializeServer() {
 
     `);
 
+// MOCK DATA INSERT: Inject Google Chrome so you can see it in the UI immediately
+// await db.run(`
+//     INSERT INTO winget_packages (package_id, name, version, download_url, sha256_hash, installer_type, silent_flags, last_synced)
+//     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+//     ON CONFLICT(package_id) DO NOTHING
+// `, [
+//     'Google.Chrome', 'Google Chrome', '133.0.0.0', 
+//     'https://dl.google.com/chrome/install/GoogleChromeStandaloneEnterprise64.msi', 
+//     'mock-hash-12345', 'msi', '/quiet /norestart', new Date().toISOString()
+// ]);
+
 const adminCount = await db.get('SELECT COUNT(*) as count FROM admins');
     if (adminCount.count === 0) {
         console.log('No admins found. Creating default admin (admin / password123%)...');
@@ -319,7 +312,7 @@ app.post('/api/logout', (req, res) => {
     });
 });
 
-// Protected Web UI Routes
+// --- Protected Web UI Routes ---
 app.get('/dashboard', requireAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'private', 'index.html'));
 });
@@ -336,8 +329,7 @@ app.get('/policy', requireAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'private', 'policy.html'));
 });
 
-// Admin API Endpoints (Protected)
-
+// --- Admin API Endpoints (Protected) ---
 app.get('/api/admin/devices', requireAuth, async (req, res) => {
     try {
         const devices = await db.all(`
@@ -358,9 +350,9 @@ app.get('/api/admin/devices', requireAuth, async (req, res) => {
     }
 });
 
-
-// Dashboard analytics endpoint
-
+// ==========================================
+// DASHBOARD ANALYTICS ENDPOINT
+// ==========================================
 app.get('/api/admin/stats/charts', requireAuth, async (req, res) => {
     try {
         // 1. Aggregate Device Statuses
@@ -379,9 +371,11 @@ app.get('/api/admin/stats/charts', requireAuth, async (req, res) => {
     }
 });
 
+// ==========================================
+// DEVICE APPROVAL & MANAGEMENT ENDPOINTS
+// ==========================================
 
-// Device approval and Management endpoints
-
+// Approve a Pending Device
 app.post('/api/admin/devices/:deviceId/approve', requireAuth, async (req, res) => {
     try {
         await db.run('UPDATE devices SET status = ? WHERE device_id = ?', ['Active', req.params.deviceId]);
@@ -392,6 +386,7 @@ app.post('/api/admin/devices/:deviceId/approve', requireAuth, async (req, res) =
     }
 });
 
+// Reject / Delete a Device
 app.delete('/api/admin/devices/:deviceId', requireAuth, async (req, res) => {
     try {
         // Manually clear the command queue first to avoid orphaned records, then delete the device
@@ -405,14 +400,12 @@ app.delete('/api/admin/devices/:deviceId', requireAuth, async (req, res) => {
     }
 });
 
-// Settings page
-
+// Serve the Settings page
 app.get('/settings', requireAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'private', 'settings.html'));
 });
 
-// Password Reset
-
+// Secure Password Reset API
 app.post('/api/admin/password', requireAuth, async (req, res) => {
     const { currentPassword, newPassword } = req.body;
     
@@ -447,7 +440,9 @@ app.post('/api/admin/password', requireAuth, async (req, res) => {
     }
 });
 
-// Enrollment Endpoints
+// ==========================================
+// TENANT & ENROLLMENT KEY ENDPOINTS
+// ==========================================
 
 // Get the current tenant details and deployment URL code
 app.get('/api/admin/tenant', requireAuth, async (req, res) => {
@@ -482,9 +477,9 @@ app.post('/api/admin/tenant/regenerate', requireAuth, async (req, res) => {
     }
 });
 
-
-// Deployment endpoints
-
+// ==========================================
+// PUBLIC DEPLOYMENT SCRIPT ENDPOINT
+// ==========================================
 // Serves the dynamic deploy.ps1 script without authentication
 app.get('/api/deploy/:uniqueCode/deploy.ps1', async (req, res) => {
     const { uniqueCode } = req.params;
@@ -627,6 +622,10 @@ app.delete('/api/admin/groups/:groupId/devices/:deviceId', requireAuth, async (r
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ==========================================
+// TOP-LEVEL DELETION ENDPOINTS
+// ==========================================
+
 // Delete a Device Group
 app.delete('/api/admin/groups/:groupId', requireAuth, async (req, res) => {
     try {
@@ -652,8 +651,9 @@ app.delete('/api/admin/policy-bundles/:bundleId', requireAuth, async (req, res) 
 });
 
 
-// Enforcement Endpoint
-
+// ==========================================
+// ENFORCE GROUP STATE
+// ==========================================
 app.post('/api/admin/groups/:groupId/enforce', requireAuth, async (req, res) => {
     const groupId = req.params.groupId;
 
@@ -743,19 +743,33 @@ app.post('/api/admin/groups/:groupId/enforce', requireAuth, async (req, res) => 
 
 
 
-app.post('/api/admin/commands', requireAuth, async (req, res) => {
-    const { deviceId, action, payload } = req.body;
-    if (!deviceId || !action) return res.status(400).json({ error: 'Device ID and Action are required.' });
-
+// Fetch the recent command queue with device names
+app.get('/api/admin/commands', requireAuth, async (req, res) => {
     try {
-        await db.run(
-            'INSERT INTO command_queue (device_id, action, payload, queued_at) VALUES (?, ?, ?, ?)',
-            [deviceId, action, JSON.stringify(payload || {}), new Date().toISOString()]
-        );
-        res.status(200).json({ status: 'success', message: 'Command queued successfully.' });
-    } catch (err) {
-        console.error('Failed to queue command:', err.message);
-        res.status(500).json({ error: 'Failed to queue command' });
+        const commands = await db.all(`
+            SELECT c.id, c.device_id, c.action, c.payload, c.status, c.queued_at, c.completed_at, c.exit_code, c.result_message, d.device_name 
+            FROM command_queue c
+            LEFT JOIN devices d ON c.device_id = d.device_id
+            ORDER BY c.queued_at DESC
+            LIMIT 100
+        `);
+        res.status(200).json(commands);
+    } catch (err) { 
+        res.status(500).json({ error: err.message }); 
+    }
+});
+
+// Retry a failed command
+app.post('/api/admin/commands/:id/retry', requireAuth, async (req, res) => {
+    try {
+        await db.run(`
+            UPDATE command_queue 
+            SET status = 'Queued', queued_at = ?, sent_at = NULL, completed_at = NULL, exit_code = NULL, result_message = NULL
+            WHERE id = ?
+        `, [new Date().toISOString(), req.params.id]);
+        res.status(200).json({ status: 'success' });
+    } catch (err) { 
+        res.status(500).json({ error: err.message }); 
     }
 });
 
@@ -788,6 +802,10 @@ app.post('/api/admin/deploy', requireAuth, async (req, res) => {
     }
 });
 
+
+// ==========================================
+// DEPLOY BUNDLE ENDPOINTS
+// ==========================================
 
 // Get all Deploy Bundles
 app.get('/api/admin/deploy-bundles', requireAuth, async (req, res) => {
@@ -1010,6 +1028,9 @@ app.post('/api/telemetry', async (req, res) => {
     }
 });
 
+// ==========================================
+// POLICY BUNDLE ENDPOINTS
+// ==========================================
 
 // Get all Policy Bundles
 app.get('/api/admin/policy-bundles', requireAuth, async (req, res) => {
@@ -1113,7 +1134,7 @@ app.post('/api/admin/policy/import', requireAuth, upload.fields([{ name: 'admx',
         const policyArray = Array.isArray(policies) ? policies : [policies];
         let importCount = 0;
 
-        // 3. Loop through policies, match strings, extract elements, and insert to SQLite
+// 3. Loop through policies, match strings, extract elements, and insert to SQLite
         for (const pol of policyArray) {
             const policyId = pol['@_name'];
             const category = pol['@_class']; 
@@ -1130,15 +1151,19 @@ app.post('/api/admin/policy/import', requireAuth, upload.fields([{ name: 'admx',
                 displayName = stringDictionary[stringKey] || stringKey;
             }
 
+            // --- THE FIX: Extract and Parse <elements> ---
             const parsedElements = [];
             if (pol.elements) {
+                // fast-xml-parser groups elements by type: pol.elements.text, pol.elements.decimal, etc.
                 for (const [elemType, elemData] of Object.entries(pol.elements)) {
+                    // Skip XML parser metadata
                     if (elemType.startsWith('@_')) continue;
 
                     const elemArray = Array.isArray(elemData) ? elemData : [elemData];
                     
                     elemArray.forEach(e => {
                         const elemId = e['@_id'];
+                        // Resolve the element's label from the ADML dictionary
                         let elemLabel = elemId;
                         if (elemId && stringDictionary[elemId]) {
                             elemLabel = stringDictionary[elemId];
@@ -1206,7 +1231,7 @@ app.post('/api/admin/policy/deploy', requireAuth, async (req, res) => {
             RegistryEdits: []
         };
 
-        // Add the Base Policy Toggle (if a base valueName exists)
+        // 1. Add the Base Policy Toggle (if a base valueName exists)
         if (policy.value_name) {
             commandPayload.RegistryEdits.push({
                 ValueName: policy.value_name,
@@ -1215,12 +1240,13 @@ app.post('/api/admin/policy/deploy', requireAuth, async (req, res) => {
             });
         }
 
-        // Add the dynamic elements the admin filled out
+        // 2. Add the dynamic elements the admin filled out
         if (configuredElements && configuredElements.length > 0) {
             configuredElements.forEach(elem => {
                 if (elem.valueName && elem.value !== "") {
                     commandPayload.RegistryEdits.push({
                         ValueName: elem.valueName,
+                        // Convert numerical inputs to integers for DWORDs
                         Value: elem.type === 'DWORD' ? parseInt(elem.value, 10) : elem.value,
                         ValueType: elem.type
                     });
@@ -1241,8 +1267,9 @@ app.post('/api/admin/policy/deploy', requireAuth, async (req, res) => {
 });
 
 
-
-// Delete / Remove endpoints
+// ==========================================
+// DELETE / REMOVE ENDPOINTS (Apps & Deploy Bundles)
+// ==========================================
 
 // Get all apps inside a specific Deploy Bundle
 app.get('/api/admin/deploy-bundles/:bundleId/items', requireAuth, async (req, res) => {
@@ -1273,6 +1300,11 @@ app.delete('/api/admin/catalog/:packageId', requireAuth, async (req, res) => {
         res.status(200).json({ status: 'success' });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+
+// ==========================================
+// DELETE / REMOVE ENDPOINTS (Policies & Policy Bundles)
+// ==========================================
 
 // Get all policies inside a specific Policy Bundle
 app.get('/api/admin/policy-bundles/:bundleId/items', requireAuth, async (req, res) => {
@@ -1413,14 +1445,14 @@ app.post('/api/checkin', async (req, res) => {
             sign.end(); 
             const serverSignature = sign.sign(serverKeys.privateKey, 'base64');
 
-        // pass the ID to the agent
+        // We need to pass the ID to the agent so it knows what to report back on
         pendingCommands.push({ 
             commandId: row.id, 
             rawPayload: rawPayloadString, 
             signature: serverSignature 
         });
 
-        // Update status to 'Sent'
+        // Update status to 'Sent' instead of deleting
         await db.run(
             'UPDATE command_queue SET status = ?, sent_at = ? WHERE id = ?', 
             ['Sent', new Date().toISOString(), row.id]
@@ -1445,7 +1477,7 @@ async function syncWinGetPackage(packageId) {
     const dirResponse = await fetch(apiDirUrl, {
         headers: { 
             'User-Agent': 'MiniDM-Agent-Crawler',
-            'Authorization': `Bearer ${GITHUB_TOKEN}`
+            'Authorization': `Bearer ${GITHUB_TOKEN}` // <-- Add it here too
         }
     });
 
