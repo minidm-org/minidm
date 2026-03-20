@@ -14,7 +14,7 @@ MiniDM is a lightweight but powerful endpoint management platform. It combines a
 * **Trust On First Use (TOFU) Security:** Dynamic enrollment keys with RSA-2048 key pair generation. Every payload is cryptographically signed by the server and verified by the agent before execution.
 * **Unified Dashboard Analytics:** A responsive, dark-mode ready UI featuring real-time visual telemetry (via Chart.js) and fleet status tracking.
 
-![Screenshot](https://raw.githubusercontent.com/minidm-org/mindm/main/docs/images/1.png)
+![Screenshot](https://raw.githubusercontent.com/minidm-org/minidm/42d4bfc6a12627d13bbaf544f50db06dd54eb684/Docs/images/0.png)
 
 ---
 
@@ -27,7 +27,7 @@ MiniDM is split into two core components:
 
 ---
 
-![Screenshot](https://raw.githubusercontent.com/minidm-org/mindm/main/docs/images/1.png)
+![Screenshot](https://raw.githubusercontent.com/minidm-org/minidm/42d4bfc6a12627d13bbaf544f50db06dd54eb684/Docs/images/1.png)
 
 ## Getting Started: The Server
 
@@ -60,7 +60,7 @@ MiniDM is split into two core components:
 
 ---
 
-![Screenshot](https://raw.githubusercontent.com/minidm-org/mindm/main/docs/images/2.png)
+![Screenshot](https://raw.githubusercontent.com/minidm-org/minidm/42d4bfc6a12627d13bbaf544f50db06dd54eb684/Docs/images/2.png)
 
 ## Getting Started: The Agent
 
@@ -84,7 +84,7 @@ Administrators can dynamically generate an enrollment script directly from the M
 
 ---
 
-![Screenshot](https://raw.githubusercontent.com/minidm-org/mindm/main/docs/images/3.png)
+![Screenshot](https://raw.githubusercontent.com/minidm-org/minidm/42d4bfc6a12627d13bbaf544f50db06dd54eb684/Docs/images/3.png)
 
 ## Contributing
 
