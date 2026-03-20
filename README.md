@@ -1,6 +1,6 @@
 # MiniDM
 
-**An open-source, self-hosted Mobile Device Management (MDM) solution for Windows 11.**
+**An open-source, self-hosted Device Management solution for Windows 11.**
 
 MiniDM is a lightweight but powerful endpoint management platform. It combines a high-concurrency Node.js server with a highly privileged, resilient C# .NET background agent. Designed for IT admins, homelabbers, and MSPs who want simple app and policy deployment for endpoints without paying exorbitant per-month subscription fees.
 
@@ -14,6 +14,8 @@ MiniDM is a lightweight but powerful endpoint management platform. It combines a
 * **Trust On First Use (TOFU) Security:** Dynamic enrollment keys with RSA-2048 key pair generation. Every payload is cryptographically signed by the server and verified by the agent before execution.
 * **Unified Dashboard Analytics:** A responsive, dark-mode ready UI featuring real-time visual telemetry (via Chart.js) and fleet status tracking.
 
+![Screenshot](https://raw.githubusercontent.com/minidm-org/mindm/main/docs/images/1.png)
+
 ---
 
 ## Architecture
@@ -24,6 +26,8 @@ MiniDM is split into two core components:
 2. **The Agent (`/agent`):** A C# .NET 10 application that runs as a highly privileged local service. It polls the server, validates cryptographic signatures, enforces registry policies, and reports execution telemetry (exit codes) back to the server.
 
 ---
+
+![Screenshot](https://raw.githubusercontent.com/minidm-org/mindm/main/docs/images/1.png)
 
 ## Getting Started: The Server
 
@@ -56,6 +60,8 @@ MiniDM is split into two core components:
 
 ---
 
+![Screenshot](https://raw.githubusercontent.com/minidm-org/mindm/main/docs/images/2.png)
+
 ## Getting Started: The Agent
 
 The C# Agent is designed to be compiled as a windows background service, but can also be compiled as a console app if desired.
@@ -77,6 +83,8 @@ Important: To install, the Agent requires that the Host and Enrollment key are c
 Administrators can dynamically generate an enrollment script directly from the MiniDM Dashboard (under the **Devices** tab). This `.ps1` script will write the active Enrollment Key and Server URL to `HKLM\SOFTWARE\MiniDM` - These keys are destroyed upon successful enrollment to prevent scraping the server address.
 
 ---
+
+![Screenshot](https://raw.githubusercontent.com/minidm-org/mindm/main/docs/images/3.png)
 
 ## Contributing
 
