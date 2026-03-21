@@ -77,6 +77,7 @@ body {
 .navbar { 
     position: sticky;
     top: 0;
+    z-index: 1;
     background: var(--navbar-bg); 
     padding: 15px 20px; 
     color: var(--navbar-text); 
@@ -136,3 +137,39 @@ button.btn-danger:hover { background: var(--danger-hover); }
 /* Status Text */
 .status-active { color: var(--success); font-weight: bold; }
 .status-pending { color: var(--warning); font-weight: bold; }
+
+
+/* --- 9. Policy Grouping & Accordions --- */
+.policy-group-header {
+    background-color: var(--table-header-bg);
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.policy-group-header:hover {
+    background-color: var(--border-light);
+}
+
+.policy-group-header td {
+    border-top: 2px solid var(--border-color); /* Stronger separator between groups */
+}
+
+.policy-item td {
+    background-color: var(--table-nested-bg);
+    border-bottom: 1px dotted var(--border-color); /* Softer separator for items */
+}
+
+.nowrap {
+    white-space: nowrap;
+}
+
+.badge {
+    background-color: var(--primary);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    margin-left: 10px;
+    font-weight: bold;
+    vertical-align: middle;
+}

@@ -1,3 +1,4 @@
+// MiniDM ©2026 Paul Wright / MiniDM.org
 require('dotenv').config();
 const express = require('express');
 const crypto = require('crypto');
@@ -19,6 +20,7 @@ const upload = multer({
 });
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(express.json());
 
 // 1. Session Configuration
@@ -111,14 +113,15 @@ async function initializeServer() {
             last_synced TEXT NOT NULL
         );
 
-        CREATE TABLE IF NOT EXISTS policy_library (
+CREATE TABLE IF NOT EXISTS policy_library (
             policy_id TEXT PRIMARY KEY,
             display_name TEXT NOT NULL,
             category TEXT,
+            policy_group TEXT,
             registry_key TEXT NOT NULL,
-            value_name TEXT,             -- This can be null if elements define their own valueNames
+            value_name TEXT,             
             policy_type TEXT,
-            elements TEXT                -- JSON array of required inputs (text, decimal, enum, list)
+            elements TEXT                
         );
 
         CREATE TABLE IF NOT EXISTS device_groups (
@@ -203,17 +206,6 @@ async function initializeServer() {
         );
 
     `);
-
-// MOCK DATA INSERT: Inject Google Chrome so you can see it in the UI immediately
-// await db.run(`
-//     INSERT INTO winget_packages (package_id, name, version, download_url, sha256_hash, installer_type, silent_flags, last_synced)
-//     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-//     ON CONFLICT(package_id) DO NOTHING
-// `, [
-//     'Google.Chrome', 'Google Chrome', '133.0.0.0', 
-//     'https://dl.google.com/chrome/install/GoogleChromeStandaloneEnterprise64.msi', 
-//     'mock-hash-12345', 'msi', '/quiet /norestart', new Date().toISOString()
-// ]);
 
 const adminCount = await db.get('SELECT COUNT(*) as count FROM admins');
     if (adminCount.count === 0) {
@@ -650,6 +642,28 @@ app.delete('/api/admin/policy-bundles/:bundleId', requireAuth, async (req, res) 
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+
+// Delete entire policy group
+app.delete('/api/admin/policy-group/:groupName', requireAuth, async (req, res) => {
+    const groupName = req.params.groupName;
+    
+    try {
+        let query = 'DELETE FROM policy_library WHERE policy_group = ?';
+        
+        // Handle the fallback case just in case
+        if (groupName === 'Uncategorized') {
+             query = 'DELETE FROM policy_library WHERE policy_group = ? OR policy_group IS NULL OR policy_group = ""';
+        }
+
+        // SQLite ON DELETE CASCADE will automatically remove these policies from policy_bundle_items!
+        const result = await db.run(query, [groupName]);
+        
+        res.status(200).json({ status: 'success', deleted: result.changes });
+    } catch (err) {
+        console.error('Failed to delete policy group:', err.message);
+        res.status(500).json({ error: 'Failed to delete policy group.' });
+    }
+});
 
 // ==========================================
 // ENFORCE GROUP STATE
@@ -1097,7 +1111,8 @@ app.post('/api/admin/policy/import', requireAuth, upload.fields([{ name: 'admx',
         if (!req.files || !req.files.admx || !req.files.adml) {
             return res.status(400).json({ error: 'Both ADMX and ADML files are required.' });
         }
-
+        // Capture the group name
+        const policyGroup = req.body.policyGroup || 'Uncategorized';
         // fast-xml-parser configuration to capture XML attributes (which contain the Registry paths)
         const parser = new XMLParser({
             ignoreAttributes: false,
@@ -1134,7 +1149,7 @@ app.post('/api/admin/policy/import', requireAuth, upload.fields([{ name: 'admx',
         const policyArray = Array.isArray(policies) ? policies : [policies];
         let importCount = 0;
 
-// 3. Loop through policies, match strings, extract elements, and insert to SQLite
+        // 3. Loop through policies, match strings, extract elements, and insert to SQLite
         for (const pol of policyArray) {
             const policyId = pol['@_name'];
             const category = pol['@_class']; 
@@ -1184,20 +1199,18 @@ app.post('/api/admin/policy/import', requireAuth, upload.fields([{ name: 'admx',
 
             // UPSERT into the database
             await db.run(`
-                INSERT INTO policy_library (policy_id, display_name, category, registry_key, value_name, policy_type, elements)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO policy_library (policy_id, display_name, category, policy_group, registry_key, value_name, policy_type, elements)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(policy_id) DO UPDATE SET
                     display_name = excluded.display_name,
                     category = excluded.category,
+                    policy_group = excluded.policy_group,
                     registry_key = excluded.registry_key,
                     value_name = excluded.value_name,
                     elements = excluded.elements
-            `, [policyId, displayName, category, registryKey, baseValueName, 'Complex', elementsJson]);
-
+            `, [policyId, displayName, category, policyGroup, registryKey, baseValueName, 'Complex', elementsJson]);
             importCount++;
         }
-
-
         res.status(200).json({ status: 'success', imported: importCount });
 
     } catch (err) {

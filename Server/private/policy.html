@@ -32,6 +32,10 @@
             <form id="admxUploadForm">
                 <div><label><strong>1. Select ADMX File (Logic):</strong></label><br><input type="file" id="admxFile" accept=".admx" required></div>
                 <div style="margin-top: 15px;"><label><strong>2. Select ADML File (Language):</strong></label><br><input type="file" id="admlFile" accept=".adml" required></div>
+                <div style="margin-top: 15px;">
+                    <label><strong>3. Policy Group Name:</strong></label><br>
+                    <input type="text" id="policyGroup" required placeholder="e.g. Desktop" style="width: 100%; box-sizing: border-box;">
+                </div>
                 <button type="submit" style="margin-top: 15px; background: #28a745; width: 100%;">Process and Import Policy</button>
             </form>
         </div>
@@ -175,20 +179,50 @@
         }
 
         // --- POLICY IMPORT & DELETION LOGIC ---
-        document.getElementById('admxUploadForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const admxFile = document.getElementById('admxFile').files[0]; const admlFile = document.getElementById('admlFile').files[0];
-            if (!admxFile || !admlFile) return alert("Both ADMX and ADML files are required.");
-            const formData = new FormData(); formData.append('admx', admxFile); formData.append('adml', admlFile);
-            const btn = e.target.querySelector('button'); btn.innerText = "Parsing XML..."; btn.disabled = true;
-            try {
-                const response = await fetch('/api/admin/policy/import', { method: 'POST', body: formData });
-                if (response.ok) { alert("Policy imported successfully!"); e.target.reset(); fetchPolicies(); } 
-                else { const err = await response.json(); alert("Import failed: " + err.error); }
-            } catch (error) { alert("Network error during upload."); }
-            btn.innerText = "Process and Import Policy"; btn.disabled = false;
+document.getElementById('admxFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                // Strip the extension and use it as the suggested group name
+                const suggestedGroupName = file.name.replace(/\.[^/.]+$/, "");
+                document.getElementById('policyGroup').value = suggestedGroupName;
+            }
         });
 
+        // --- UPDATED: Form Submission ---
+        document.getElementById('admxUploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const admxFile = document.getElementById('admxFile').files[0]; 
+            const admlFile = document.getElementById('admlFile').files[0];
+            const policyGroup = document.getElementById('policyGroup').value.trim(); // Get the group name
+            
+            if (!admxFile || !admlFile) return alert("Both ADMX and ADML files are required.");
+            
+            const formData = new FormData(); 
+            formData.append('admx', admxFile); 
+            formData.append('adml', admlFile);
+            formData.append('policyGroup', policyGroup); // Append to payload
+            
+            const btn = e.target.querySelector('button'); 
+            btn.innerText = "Parsing XML..."; 
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch('/api/admin/policy/import', { method: 'POST', body: formData });
+                if (response.ok) { 
+                    alert("Policy imported successfully!"); 
+                    e.target.reset(); 
+                    fetchPolicies(); 
+                } else { 
+                    const err = await response.json(); 
+                    alert("Import failed: " + err.error); 
+                }
+            } catch (error) { alert("Network error during upload."); }
+            
+            btn.innerText = "Process and Import Policy"; 
+            btn.disabled = false;
+        });
+
+        // --- UPDATED: Fetch and Group Policies in the Table ---
         async function fetchPolicies() {
             try {
                 const response = await fetch('/api/admin/policy');
@@ -201,24 +235,65 @@
                     return;
                 }
 
-                globalPolicies.forEach(pol => {
-                    const safeId = pol.policy_id.replace(/'/g, "\\'");
-                    const safeUrlId = encodeURIComponent(pol.policy_id);
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td><strong>${pol.display_name}</strong><br><small style="color:#666;">${pol.policy_id}</small></td>
-                        <td>${pol.category}</td>
-                        <td style="font-family: monospace; font-size: 0.8em; word-break: break-all;">${pol.registry_key}</td>
-                        <td>
-                            <button onclick="openUnifiedModal('${safeId}')" style="background: #007bff; margin-bottom: 5px;">Configure</button>
-                            <button onclick="deleteFromLibrary('${safeUrlId}')" class="btn-danger" style="margin-left: 5px; margin-bottom: 5px;">Delete</button>
+                // 1. Group the policies by the policy_group attribute
+                const groupedPolicies = globalPolicies.reduce((acc, pol) => {
+                    const group = pol.policy_group || 'Uncategorized';
+                    if (!acc[group]) acc[group] = [];
+                    acc[group].push(pol);
+                    return acc;
+                }, {});
+
+                // 2. Render the Accordion Headers and Rows
+                for (const [groupName, policies] of Object.entries(groupedPolicies)) {
+                    // Create a safe string for CSS classes (strip spaces/special chars)
+                    const safeGroupClass = 'group-' + groupName.replace(/[^a-zA-Z0-9]/g, '_');
+                    
+                    // The Header Row (Clickable)
+                    const headerRow = document.createElement('tr');
+                    headerRow.className = 'policy-group-header';
+                    headerRow.onclick = () => togglePolicyGroup(safeGroupClass);
+                    headerRow.innerHTML = `
+                        <td colspan="4">
+                            <strong style="font-size: 1.1em;">📁 ${groupName}</strong> 
+                            <span class="badge">${policies.length}</span>
+                            <span style="float: right; font-size: 0.8em; color: var(--text-muted); margin-top: 3px;">
+                                Click to expand
+                                <button class="btn-danger" style="margin-left: 15px; padding: 2px 8px; font-size: 0.9em;" onclick="deletePolicyGroup(event, '${groupName.replace(/'/g, "\\'")}')">Ꭓ</button>
+                            </span>
                         </td>
                     `;
-                    tbody.appendChild(row);
-                });
+                    tbody.appendChild(headerRow);
+
+                    // The Policy Item Rows (Hidden by default)
+                    policies.forEach(pol => {
+                        const safeId = pol.policy_id.replace(/'/g, "\\'");
+                        const safeUrlId = encodeURIComponent(pol.policy_id);
+                        const row = document.createElement('tr');
+                        row.className = `policy-item ${safeGroupClass}`;
+                        row.style.display = 'none'; // Keep collapsed initially
+                        row.innerHTML = `
+                            <td style="padding-left: 30px;"><strong>${pol.display_name}</strong><br><small style="color:#666;">${pol.policy_id}</small></td>
+                            <td>${pol.category}</td>
+                            <td style="font-family: monospace; font-size: 0.8em; word-break: break-all;">${pol.registry_key}</td>
+                            <td class="nowrap">
+                                <button onclick="openUnifiedModal('${safeId}')" style="background: #007bff; margin-bottom: 5px;">Config</button>
+                                <button onclick="deleteFromLibrary('${safeUrlId}')" class="btn-danger" style="margin-left: 5px; margin-bottom: 5px;">Delete</button>
+                            </td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                }
             } catch (error) { console.error('Error fetching policies:', error); }
         }
 
+        // Toggle function for the Accordion ---
+        function togglePolicyGroup(groupClass) {
+            const rows = document.querySelectorAll(`.${groupClass}`);
+            rows.forEach(row => {
+                // Toggle between showing as a table row or being completely hidden
+                row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+            });
+        }
         async function deleteFromLibrary(encodedPolicyId) {
             if(!confirm("Are you sure you want to delete this policy? It will also be removed from any bundles it belongs to.")) return;
             try {
@@ -228,6 +303,31 @@
                     fetchBundles(); // Re-fetch bundles to update counts
                 } else { alert("Failed to delete policy."); }
             } catch (err) { alert("Network error."); }
+        }
+
+        // Delete Entire Policy Group ---
+        async function deletePolicyGroup(event, groupName) {
+            // Stop the click from bubbling up and triggering the accordion toggle
+            event.stopPropagation(); 
+
+            if (!confirm(`Are you sure you want to delete the entire '${groupName}' group and ALL of its policies? \n\nThey will also be automatically removed from any assigned Policy Bundles.`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/admin/policy-group/${encodeURIComponent(groupName)}`, { method: 'DELETE' });
+                
+                if (res.ok) {
+                    // Re-fetch both policies and bundles, since bundle counts likely changed!
+                    fetchPolicies();
+                    fetchBundles(); 
+                } else { 
+                    const data = await res.json();
+                    alert("Failed to delete group: " + (data.error || "Unknown error")); 
+                }
+            } catch (err) { 
+                alert("Network error."); 
+            }
         }
 
         // --- UNIFIED MODAL LOGIC (Config + Assignment) ---

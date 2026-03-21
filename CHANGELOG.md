@@ -6,6 +6,26 @@
 
 
 
+\## \[1.1.1] - 2026-03-20
+
+\### New
+
+* Policy Groups
+
+
+
+\### Fixed
+
+* Enrollment would fail if server was behind HTTPS reverse proxy.
+
+
+
+
+
+\---
+
+
+
 \## \[1.1.0] - 2026-03-20
 
 \### New
@@ -34,6 +54,4 @@
 \## \[1.0.0] - 2026-03-18
 
 * Initial Release
-
-
 
